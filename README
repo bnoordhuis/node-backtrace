@@ -26,7 +26,7 @@ backtrace.backtrace()  -  Prints a backtrace to stderr.
 KNOWN BUGS
 ==========
 
-* Only supports x86_64 (x64) right now.
+* Only supports i386 and x86_64 (ia32 and x64).
 * Only tested on Linux and OS X.
 
 

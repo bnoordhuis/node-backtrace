@@ -252,7 +252,15 @@ __attribute__((noinline))
 void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame))
 {
   const Frame* frame;
+
+#if defined(__x86_64__)
   __asm__ __volatile__ ("mov %%rbp, %0" : "=g" (frame));
+#elif defined(__i386__)
+  __asm__ __volatile__ ("mov %%ebp, %0" : "=g" (frame));
+#else
+# error "Unsupported architecture. Only i386 and x86_64 work."
+#endif
+
   do
     if (skip == 0)
       cb(frame);
