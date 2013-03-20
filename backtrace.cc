@@ -73,6 +73,14 @@ v8::Local<v8::StackTrace> stack_trace;
 
 const Frame* stack_top = reinterpret_cast<const Frame*>(-1);
 
+#if defined(__linux__)
+const char entry_point[] = "main";
+#elif defined(__APPLE__)
+const char entry_point[] = "start";
+#else
+# error "Unsupported platform. Only Linux and OS X work."
+#endif
+
 void init(v8::Handle<v8::Object> module)
 {
   struct sigaction sa;
@@ -90,7 +98,9 @@ void find_stack_top(const Frame* frame)
   Dl_info info;
   if (dladdr(frame->return_address, &info) == 0)
     return;
-  if (strcmp(info.dli_sname, "start") != 0)
+  if (info.dli_sname == NULL)
+    return;
+  if (strcmp(info.dli_sname, entry_point) != 0)
     return;
   stack_top = frame->frame_pointer;
 }
