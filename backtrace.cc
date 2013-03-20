@@ -24,9 +24,16 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 
+#if !defined(__linux__) && !defined(__APPLE__)
+# error "Unsupported platform. Only Linux and OS work."
+#endif
+
+#if !defined(__i386__) && !defined(__x86_64__)
+# error "Unsupported architecture. Only i386 and x86_64 work."
+#endif
+
 extern "C" {
 void jsbacktrace(void);
-int main(int, char**);  // Top of the stack.
 }
 
 namespace
@@ -73,14 +80,6 @@ v8::Local<v8::StackTrace> stack_trace;
 
 const Frame* stack_top = reinterpret_cast<const Frame*>(-1);
 
-#if defined(__linux__)
-const char entry_point[] = "main";
-#elif defined(__APPLE__)
-const char entry_point[] = "start";
-#else
-# error "Unsupported platform. Only Linux and OS X work."
-#endif
-
 void init(v8::Handle<v8::Object> module)
 {
   struct sigaction sa;
@@ -100,9 +99,15 @@ void find_stack_top(const Frame* frame)
     return;
   if (info.dli_sname == NULL)
     return;
-  if (strcmp(info.dli_sname, entry_point) != 0)
-    return;
-  stack_top = frame->frame_pointer;
+#if defined(__APPLE__)
+  if (strcmp(info.dli_sname, "start") == 0)
+    stack_top = frame->frame_pointer;
+#elif defined(__linux__)
+  // __libc_start_main() has no next frame pointer. Scanning for main() is not
+  // safe because the compiler sometimes optimizes it away entirely.
+  if (strcmp(info.dli_sname, "__libc_start_main") == 0)
+    stack_top = frame;
+#endif
 }
 
 v8::Handle<v8::Value> backtrace(const v8::Arguments&)
@@ -257,8 +262,6 @@ void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame))
   __asm__ __volatile__ ("mov %%rbp, %0" : "=g" (frame));
 #elif defined(__i386__)
   __asm__ __volatile__ ("mov %%ebp, %0" : "=g" (frame));
-#else
-# error "Unsupported architecture. Only i386 and x86_64 work."
 #endif
 
   do
@@ -266,7 +269,7 @@ void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame))
       cb(frame);
     else
       skip -= 1;
-  while ((frame = frame->frame_pointer) < stack_top);
+  while ((frame = frame->frame_pointer) != NULL && frame < stack_top);
 }
 
 }  // anonymous namespace
