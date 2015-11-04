@@ -169,7 +169,7 @@ bool print_c_frame(const Frame* frame, FILE* stream)
           "%lx+%lx\t%s %s(%p)\n",
           reinterpret_cast<long>(info.dli_saddr),
           OFFSET(info.dli_saddr, frame->return_address),
-          name,
+          name ? name : "<unknown>",
           info.dli_fname,
           info.dli_fbase);
 
