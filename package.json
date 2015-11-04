@@ -1,7 +1,7 @@
 {
   "name": "backtrace",
   "main": "./build/Release/backtrace",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Prints a C++ and JS backtrace on SIGABRT.",
   "homepage": "https://github.com/bnoordhuis/node-backtrace",
   "repository": {
@@ -13,7 +13,7 @@
     "email": "info@bnoordhuis.nl"
   },
   "engines": {
-    "node": ">=0.8.0"
+    "node": ">=0.10.0"
   },
   "license": "ISC",
   "readmeFilename": "README"
