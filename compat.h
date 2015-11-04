@@ -96,6 +96,12 @@ struct Object : public AllStatic {
   inline static v8::Local<v8::Object> New(v8::Isolate* isolate);
 };
 
+struct StackTrace : public AllStatic {
+  inline static v8::Local<v8::StackTrace> CurrentStackTrace(
+      v8::Isolate* isolate, int frame_limit,
+      v8::StackTrace::StackTraceOptions options = v8::StackTrace::kOverview);
+};
+
 struct String : public AllStatic {
   enum NewStringType {
     kNormalString,

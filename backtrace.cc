@@ -14,8 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "compat.h"
+#include "compat-inl.h"
 #include "v8.h"
 #include "node.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,11 +36,13 @@
 #endif
 
 extern "C" {
-void jsbacktrace(void);
+void jsbacktrace(v8::Isolate* isolate);
 }
 
 namespace
 {
+
+namespace C = ::compat;
 
 #define OFFSET(base, addr)                                                    \
   (static_cast<long>(static_cast<const char*>(addr) -                         \
@@ -60,12 +65,13 @@ struct Code
 };
 
 void sigabrt(int);
-void find_stack_top(const Frame* frame);
-void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame));
-v8::Handle<v8::Value> backtrace(const v8::Arguments&);
-void print_stack_frame(const Frame* frame);
+void find_stack_top(void*, const Frame* frame);
+void walk_stack_frames(unsigned skip, void (*cb)(void* arg, const Frame* frame),
+                       void* arg);
+C::ReturnType backtrace(const C::ArgumentType& args);
+void print_stack_frame(void* arg, const Frame* frame);
 bool print_c_frame(const Frame* frame, FILE* stream);
-bool print_js_frame(const Frame* frame, FILE* stream);
+bool print_js_frame(v8::Isolate* isolate, const Frame* frame, FILE* stream);
 Code* find_code(const void* addr);
 void add_code(const char* name,
               unsigned int namelen,
@@ -76,23 +82,25 @@ void jit_code_event(const v8::JitCodeEvent* ev);
 
 struct Code* code_head;
 int stack_trace_index;
+v8::Isolate* main_isolate;
 v8::Local<v8::StackTrace> stack_trace;
 
 const Frame* stack_top = reinterpret_cast<const Frame*>(-1);
 
-void init(v8::Handle<v8::Object> module)
+void init(v8::Local<v8::Object> module)
 {
+  v8::Isolate* const isolate = main_isolate = v8::Isolate::GetCurrent();
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_flags = SA_RESETHAND;
   sa.sa_handler = sigabrt;
   sigaction(SIGABRT, &sa, NULL);
-  walk_stack_frames(0, find_stack_top);
-  module->Set(v8::String::New("backtrace"),
-              v8::FunctionTemplate::New(backtrace)->GetFunction());
+  walk_stack_frames(0, find_stack_top, NULL);
+  module->Set(C::String::NewFromUtf8(isolate, "backtrace"),
+              C::FunctionTemplate::New(isolate, backtrace)->GetFunction());
 }
 
-void find_stack_top(const Frame* frame)
+void find_stack_top(void*, const Frame* frame)
 {
   Dl_info info;
   if (dladdr(frame->return_address, &info) == 0)
@@ -110,33 +118,34 @@ void find_stack_top(const Frame* frame)
 #endif
 }
 
-v8::Handle<v8::Value> backtrace(const v8::Arguments&)
+C::ReturnType backtrace(const C::ArgumentType& args)
 {
-  jsbacktrace();
-  return v8::Undefined();
+  C::ReturnableHandleScope handle_scope(args);
+  jsbacktrace(args.GetIsolate());
+  return handle_scope.Return();
 }
 
 void sigabrt(int)
 {
-  jsbacktrace();
+  jsbacktrace(main_isolate);
   raise(SIGABRT);
 }
 
 // Externally visible.
-extern "C" void jsbacktrace(void)
+extern "C" void jsbacktrace(v8::Isolate* isolate)
 {
-  walk_stack_frames(1, print_stack_frame);
+  walk_stack_frames(1, print_stack_frame, isolate);
   free_code();
 }
 
-void print_stack_frame(const Frame* frame)
+void print_stack_frame(void* arg, const Frame* frame)
 {
   FILE* stream = stderr;
 
   if (print_c_frame(frame, stream))
     return;
 
-  if (print_js_frame(frame, stream))
+  if (print_js_frame(static_cast<v8::Isolate*>(arg), frame, stream))
     return;
 
   // Unresolved. Just print the raw address.
@@ -170,14 +179,14 @@ bool print_c_frame(const Frame* frame, FILE* stream)
   return true;
 }
 
-bool print_js_frame(const Frame* frame, FILE* stream)
+bool print_js_frame(v8::Isolate* isolate, const Frame* frame, FILE* stream)
 {
   if (code_head == NULL) {
     // Lazy init.
-    v8::V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
-                                   jit_code_event);
-    v8::V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
-    stack_trace = v8::StackTrace::CurrentStackTrace(64);
+    C::Isolate::SetJitCodeEventHandler(isolate, v8::kJitCodeEventEnumExisting,
+                                       jit_code_event);
+    C::Isolate::SetJitCodeEventHandler(isolate, v8::kJitCodeEventDefault, NULL);
+    stack_trace = C::StackTrace::CurrentStackTrace(isolate, 64);
     stack_trace_index = 0;
   }
 
@@ -254,7 +263,8 @@ void jit_code_event(const v8::JitCodeEvent* ev)
 }
 
 __attribute__((noinline))
-void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame))
+void walk_stack_frames(unsigned skip, void (*cb)(void* arg, const Frame* frame),
+                       void* arg)
 {
   const Frame* frame;
 
@@ -266,7 +276,7 @@ void walk_stack_frames(unsigned skip, void (*cb)(const Frame* frame))
 
   do
     if (skip == 0)
-      cb(frame);
+      cb(arg, frame);
     else
       skip -= 1;
   while ((frame = frame->frame_pointer) != NULL && frame < stack_top);

@@ -247,6 +247,13 @@ void HeapProfiler::DeleteAllHeapSnapshots(v8::Isolate* isolate) {
   v8::HeapProfiler::DeleteAllSnapshots();
 }
 
+v8::Local<v8::StackTrace> StackTrace::CurrentStackTrace(
+    v8::Isolate* isolate, int frame_limit,
+    v8::StackTrace::StackTraceOptions options) {
+  I::Use(isolate);
+  return v8::StackTrace::CurrentStackTrace(frame_limit, options);
+}
+
 v8::Local<v8::String> String::NewFromUtf8(v8::Isolate* isolate,
                                           const char* data, NewStringType type,
                                           int length) {
@@ -332,6 +339,12 @@ const v8::HeapSnapshot* HeapProfiler::TakeHeapSnapshot(v8::Isolate* isolate) {
 
 void HeapProfiler::DeleteAllHeapSnapshots(v8::Isolate* isolate) {
   return isolate->GetHeapProfiler()->DeleteAllHeapSnapshots();
+}
+
+v8::Local<v8::StackTrace> StackTrace::CurrentStackTrace(
+    v8::Isolate* isolate, int frame_limit,
+    v8::StackTrace::StackTraceOptions options) {
+  return v8::StackTrace::CurrentStackTrace(isolate, frame_limit, options);
 }
 
 v8::Local<v8::String> String::NewFromUtf8(v8::Isolate* isolate,
